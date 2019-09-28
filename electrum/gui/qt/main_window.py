@@ -1698,7 +1698,9 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
             self.payto_e.setGreen()
         else:
             self.payto_e.setExpired()
-        self.payto_e.setText(pr.get_requestor())
+        req = pr.get_requestor()
+        print('payment_request_ok', )
+        self.payto_e.setText(req)
         self.amount_e.setText(format_satoshis_plain(pr.get_amount(), self.decimal_point))
         self.message_e.setText(pr.get_memo())
         # signal to set fee
@@ -1732,8 +1734,9 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
                 description = v
                 break
         else:
-             description = ''
+            description = ''
         self.payto_e.setFrozen(True)
+        print('parse_lightning_invoice', pubkey)
         self.payto_e.setText(pubkey)
         self.message_e.setText(description)
         if lnaddr.amount is not None:
@@ -1769,6 +1772,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
         if label and not message:
             message = label
         if address:
+            print('pay_to_URI', address)
             self.payto_e.setText(address)
         if message:
             self.message_e.setText(message)
@@ -1850,10 +1854,12 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger):
         paytos = [self.get_contact_payto(label) for label in labels]
         self.show_send_tab()
         if len(paytos) == 1:
+            print('payto_contacts', paytos)
             self.payto_e.setText(paytos[0])
             self.amount_e.setFocus()
         else:
             text = "\n".join([payto + ", 0" for payto in paytos])
+            print('payto_contacts', text)
             self.payto_e.setText(text)
             self.payto_e.setFocus()
 

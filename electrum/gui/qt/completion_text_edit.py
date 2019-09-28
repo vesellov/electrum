@@ -49,6 +49,7 @@ class CompletionTextEdit(ButtonsTextEdit):
         self.enable_suggestions()
 
     def insert_completion(self, completion):
+        print('insert_completion', completion)
         if self.completer.widget() != self:
             return
         text_cursor = self.textCursor()
