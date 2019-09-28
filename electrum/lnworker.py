@@ -137,7 +137,9 @@ class LNWorker(Logger):
         return {}
 
     async def maybe_listen(self):
-        listen_addr = self.config.get('lightning_listen')
+        listen_addr = self.config.get('lightning_listen_internal')
+        if not listen_addr:
+            listen_addr = self.config.get('lightning_listen')
         if listen_addr:
             addr, port = listen_addr.rsplit(':', 2)
             if addr[0] == '[':
@@ -179,6 +181,7 @@ class LNWorker(Logger):
         peer = Peer(self, node_id, transport)
         await self.network.main_taskgroup.spawn(peer.main_loop())
         self.peers[node_id] = peer
+        # print('_add_peer self.peers', host, port, node_id, self.peers)
         return peer
 
     def num_peers(self):
@@ -890,8 +893,11 @@ class LNWallet(LNWorker):
         Can be called from other threads
         """
         coro = self._pay(invoice, amount_sat, attempts)
+        print('pay1', coro)
         fut = asyncio.run_coroutine_threadsafe(coro, self.network.asyncio_loop)
+        print('pay2', fut)
         success = fut.result()
+        print('pay3', success)
 
     def get_channel_by_short_id(self, short_channel_id: ShortChannelID) -> Channel:
         with self.lock:
@@ -914,6 +920,7 @@ class LNWallet(LNWorker):
         self.wallet.set_label(key, lnaddr.get_description())
         log = self.logs[key]
         success = False
+        print('lnaddr', lnaddr)
         for i in range(attempts):
             try:
                 route = await self._create_route_from_invoice(decoded_invoice=lnaddr)
@@ -1038,14 +1045,18 @@ class LNWallet(LNWorker):
         random.shuffle(r_tags)
         with self.lock:
             channels = list(self.channels.values())
+        print('r_tags', r_tags)
         for private_route in r_tags:
+            print('private_route', private_route)
             if len(private_route) == 0:
                 continue
             if len(private_route) > NUM_MAX_EDGES_IN_PAYMENT_PATH:
+                print('len(private_route) is', len(private_route))
                 continue
             border_node_pubkey = private_route[0][0]
             path = self.network.path_finder.find_path_for_payment(self.node_keypair.pubkey, border_node_pubkey, amount_msat, channels)
             if not path:
+                print('find_path_for_payment returns None')
                 continue
             route = self.network.path_finder.create_route_from_path(path, self.node_keypair.pubkey)
             # we need to shift the node pubkey by one towards the destination:
@@ -1075,9 +1086,11 @@ class LNWallet(LNWorker):
         if route is None:
             path = self.network.path_finder.find_path_for_payment(self.node_keypair.pubkey, invoice_pubkey, amount_msat, channels)
             if not path:
+                print('no path found')
                 raise NoPathFound()
             route = self.network.path_finder.create_route_from_path(path, self.node_keypair.pubkey)
             if not is_route_sane_to_use(route, amount_msat, decoded_invoice.get_min_final_cltv_expiry()):
+                print('insane route')
                 self.logger.info(f"rejecting insane route {route}")
                 raise NoPathFound()
         return route
@@ -1188,12 +1201,15 @@ class LNWallet(LNWorker):
         with self.lock:
             channels = list(self.channels.values())
         # note: currently we add *all* our channels; but this might be a privacy leak?
+        print('channels', channels)
         for chan in channels:
             # check channel is open
+            print('chan.get_state()', chan.get_state())
             if chan.get_state() != channel_states.OPEN:
                 continue
             # check channel has sufficient balance
             # FIXME because of on-chain fees of ctx, this check is insufficient
+            print('amount_sat', amount_sat, 'chan.balance(REMOTE) // 1000', chan.balance(REMOTE) // 1000)
             if amount_sat and chan.balance(REMOTE) // 1000 < amount_sat:
                 continue
             chan_id = chan.short_channel_id
@@ -1207,6 +1223,7 @@ class LNWallet(LNWorker):
             fee_base_msat = fee_proportional_millionths = 0
             cltv_expiry_delta = 1  # lnd won't even try with zero
             missing_info = True
+            print('channel_info', channel_info)
             if channel_info:
                 policy = self.channel_db.get_policy_for_node(channel_info.short_channel_id, chan.node_id)
                 if policy:
@@ -1222,6 +1239,7 @@ class LNWallet(LNWorker):
                                          fee_base_msat,
                                          fee_proportional_millionths,
                                          cltv_expiry_delta)]))
+        print('routing_hints', routing_hints)
         return routing_hints
 
     def delete_payment(self, payment_hash_hex: str):
